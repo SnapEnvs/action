@@ -57,6 +57,8 @@ Previews expire using the project's lifetime. Sleep, wake and early destruction 
 
 ## Development
 
+Run `node --test tests/action.test.mjs` with Node 24 to validate the Action. The tests isolate GitHub/API and Docker boundaries; a real customer pipeline is the deployment acceptance check.
+
 This repository distributes the official SnapEnvs Action and `.github/workflows/preview.yml`. Pin a full commit SHA when integrating. Service configuration and the generated installation workflow are managed in [SnapEnvs](https://app.snapenvs.com/integrations).
 
 GitHub references: [reusable workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows), [Action metadata](https://docs.github.com/en/actions/reference/workflows-and-actions/metadata-syntax), [OIDC claims](https://docs.github.com/en/actions/reference/security/oidc).
