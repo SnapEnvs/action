@@ -1,0 +1,24 @@
+name: SnapEnvs registry authentication
+description: Authenticate Docker and crane to the SnapEnvs registry with short-lived GitHub OIDC credentials.
+author: SnapEnvs
+inputs:
+  project:
+    description: SnapEnvs project ID with image publication enabled for this repository.
+    required: true
+  api-url:
+    description: SnapEnvs API origin.
+    default: https://snapenvs.com
+outputs:
+  host:
+    description: SnapEnvs registry hostname.
+  image-prefix:
+    description: Authorized image path prefix for this project and repository.
+  username:
+    description: Registry username, without the credential.
+  expires-at:
+    description: Credential expiry in UTC. Authenticate immediately before publishing.
+runs:
+  using: node24
+  main: index.mjs
+  post: post.mjs
+  post-if: always()

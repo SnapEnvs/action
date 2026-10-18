@@ -221,6 +221,21 @@ test('a lost release response retries the identical run and images', async () =>
   assert.deepEqual(releases[0].body, releases[1].body)
 })
 
+test('readiness polling accepts a one-second interval and rejects invalid bounds before exchanging identity', async () => {
+  const f = fixture({ 'INPUT_WAIT-INTERVAL': '1' })
+  f.routes.set('/api/v1/ci/github/releases', () =>
+    f.respond({ environment: { ...deployed, observedState: 'PENDING' } }),
+  )
+  const start = f.now()
+  await runAction(f)
+  assert.equal(f.now() - start, 1000)
+  for (const value of ['0', '31', '0.5', 'invalid']) {
+    const invalid = fixture({ 'INPUT_WAIT-INTERVAL': value })
+    await assert.rejects(runAction(invalid), /wait-interval/)
+    assert.equal(invalid.calls.length, 0)
+  }
+})
+
 test('an idempotent retry cannot report a later deployment as its own successful generation', async () => {
   const f = fixture()
   f.routes.set('/api/v1/ci/github/releases', () =>

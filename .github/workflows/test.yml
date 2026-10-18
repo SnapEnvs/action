@@ -19,4 +19,4 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       - run: node --check index.mjs
-      - run: node --test tests/action.test.mjs
+      - run: node --test tests/*.test.mjs

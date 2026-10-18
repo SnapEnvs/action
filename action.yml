@@ -19,6 +19,9 @@ inputs:
   wait-seconds:
     description: Maximum time to wait for readiness.
     default: '600'
+  wait-interval:
+    description: Seconds between readiness checks, from 1 to 30.
+    default: '2'
 outputs:
   environment-id:
     description: SnapEnvs environment ID.
