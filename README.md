@@ -23,7 +23,7 @@ permissions:
 # Inside your existing job, after building and publishing:
 steps:
   # ... your build steps ...
-  - uses: OWNER/REPOSITORY@FULL_ACTION_COMMIT_SHA
+  - uses: SnapEnvs/action@980b26bdc68b34db1ea544ba0f3d9062ef75507d
     id: preview
     with:
       project: YOUR_PROJECT_UUID
@@ -57,6 +57,6 @@ Previews expire using the project's lifetime. Sleep, wake and early destruction 
 
 ## Development
 
-This directory is the distribution source. The application repository's `docs/github-actions.md` describes packaging and publication; `scripts/package-github-integration.mjs` assembles the standalone Action and reusable workflow without publishing them. Tests run with `npm run test:github` in the application repository.
+This repository distributes the official SnapEnvs Action and `.github/workflows/preview.yml`. Pin a full commit SHA when integrating. Service configuration and the generated installation workflow are managed in [SnapEnvs](https://app.snapenvs.com/integrations).
 
 GitHub references: [reusable workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows), [Action metadata](https://docs.github.com/en/actions/reference/workflows-and-actions/metadata-syntax), [OIDC claims](https://docs.github.com/en/actions/reference/security/oidc).

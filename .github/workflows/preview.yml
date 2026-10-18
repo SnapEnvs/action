@@ -1,0 +1,49 @@
+name: SnapEnvs preview
+on:
+  workflow_call:
+    inputs:
+      project:
+        required: true
+        type: string
+      api-url:
+        type: string
+        default: https://snapenvs.com
+    outputs:
+      preview-url:
+        description: Preview URL
+        value: ${{ jobs.preview.outputs.preview-url }}
+      environment-id:
+        description: SnapEnvs environment ID
+        value: ${{ jobs.preview.outputs.environment-id }}
+      configuration-revision:
+        description: Configuration revision
+        value: ${{ jobs.preview.outputs.configuration-revision }}
+      deployment-skipped:
+        description: Release accepted without starting a deployment
+        value: ${{ jobs.preview.outputs.deployment-skipped }}
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: snapenvs-${{ github.repository_id }}-${{ inputs.project }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  preview:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    outputs:
+      preview-url: ${{ steps.deploy.outputs.preview-url }}
+      environment-id: ${{ steps.deploy.outputs.environment-id }}
+      configuration-revision: ${{ steps.deploy.outputs.configuration-revision }}
+      deployment-skipped: ${{ steps.deploy.outputs.deployment-skipped }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Build and deploy preview
+        id: deploy
+        uses: SnapEnvs/action@980b26bdc68b34db1ea544ba0f3d9062ef75507d
+        with:
+          project: ${{ inputs.project }}
+          api-url: ${{ inputs.api-url }}
