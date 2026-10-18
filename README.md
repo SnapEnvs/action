@@ -62,6 +62,55 @@ Run authentication immediately before publication. The credential is bounded by 
 
 The standalone deployment Action also accepts `wait-interval` from 1 to 30 seconds (default 2). Set `wait-interval: 1` when a faster readiness check is useful. This changes polling only; it does not change application health checks.
 
+## Publish application files over a cached runtime
+
+`SnapEnvs/action/publish-image` provides the fast path for applications that do not need compilation. It installs checksum-pinned crane 0.22.1, appends one deterministic application layer to a remote runtime digest, and pushes an immutable image. It uses the preceding `registry-auth` step's `DOCKER_CONFIG`; it does not request credentials or deploy by itself.
+
+Replace `FULL_PUBLISHED_COMMIT_SHA` below with the same full published Action commit in all three steps:
+
+```yaml
+steps:
+  # Check out the dispatched commit and run your application's tests first.
+  - uses: SnapEnvs/action/registry-auth@FULL_PUBLISHED_COMMIT_SHA
+    id: registry
+    with:
+      project: YOUR_PROJECT_UUID
+  - uses: SnapEnvs/action/publish-image@FULL_PUBLISHED_COMMIT_SHA
+    id: image
+    with:
+      image: ${{ steps.registry.outputs.image-prefix }}/app
+      files: |
+        app
+        web
+        migrations
+        gunicorn.conf.py
+        release.json
+      env: |
+        DEMO_COMMIT=${{ github.sha }}
+        DEMO_BRANCH=${{ github.ref_name }}
+  - uses: SnapEnvs/action@FULL_PUBLISHED_COMMIT_SHA
+    with:
+      project: YOUR_PROJECT_UUID
+      images: app=${{ steps.image.outputs.image }}
+      wait-interval: '1'
+```
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `image` | required | Registry repository without a tag or digest |
+| `context` | `.` | Source directory inside the checked-out repository |
+| `files` | required | One relative file or directory per line, without globs |
+| `runtime-key-files` | `Dockerfile`, `requirements.txt` | Ordered runtime build inputs, one per line; must include `Dockerfile` |
+| `destination` | `/app` | Application directory inside the image |
+| `uid` / `gid` | `10001` / `10001` | Application file ownership |
+| `env` | empty | One non-secret `KEY=value` image configuration entry per line |
+
+The Dockerfile must have a `runtime` target that contains the dependencies, user, command and other runtime settings. Application files are copied by this companion, so instructions in subsequent Dockerfile stages are not executed. Pin base images by digest and list **every file used by the runtime target** in `runtime-key-files`. Otherwise dependency changes cannot invalidate the cache. Changing their order also changes the cache key. Cache keys preserve the original light-demo publisher's `Dockerfile`/`requirements.txt` format.
+
+A missing runtime manifest triggers `docker build --platform linux/amd64 --target runtime` and a push once. Authentication or transport failures stop publication instead of rebuilding. Every application release starts from the runtime digest, so layers do not accumulate. Source files are sorted and copied with mode `0644`, the configured ownership and a zero timestamp; executable files, symlinks and arbitrary build steps are outside this fast path. Git metadata, `.env` files and symlinks are rejected; Python bytecode is omitted. Only select files safe to publish: this is an allowlist, not a general secret scanner.
+
+Outputs are `image`, `digest`, `seconds` and `runtime-cache-miss`. JSON log metrics include runtime lookup/build time, layer bytes and push time. `seconds` excludes crane installation; use the entire Action step and workflow timestamps for customer-facing latency. The companion requires Linux amd64, Python 3.12+, curl, tar and Docker for a cache miss; `ubuntu-24.04` supplies these tools. No Python packages, Node packages or copied publisher script are needed in the application repository.
+
 ## Trust, retries and lifecycle
 
 Only repository-owned `push` and `workflow_dispatch` jobs on trusted branch refs are accepted. Fork PRs, `pull_request`, `pull_request_target` and tags are rejected. Anyone allowed to push a trusted branch can publish its previews. OIDC binds the run ID, attempt, repository identity, branch and commit; using a reusable workflow is not an additional authorization boundary.
@@ -74,8 +123,6 @@ Previews expire using the project's lifetime. Sleep, wake and early destruction 
 
 ## Development
 
-Run `node --test tests/*.test.mjs` with Node 24 to validate the Action. The tests isolate GitHub/API and Docker boundaries; a real customer pipeline is the deployment acceptance check.
-
-This repository distributes the official SnapEnvs Action and `.github/workflows/preview.yml`. Pin a full commit SHA when integrating. Service configuration and the generated installation workflow are managed in [SnapEnvs](https://app.snapenvs.com/integrations).
+This directory is the distribution source. The application repository's `docs/github-actions.md` describes packaging and publication; `scripts/package-github-integration.mjs` assembles the deployment Action, registry authentication and image publishing companions, tests and reusable workflow without publishing them. Tests run with `npm run test:github` in the application repository, including the Python publisher suite and the isolated standalone distribution tests.
 
 GitHub references: [reusable workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows), [Action metadata](https://docs.github.com/en/actions/reference/workflows-and-actions/metadata-syntax), [OIDC claims](https://docs.github.com/en/actions/reference/security/oidc).

@@ -20,3 +20,56 @@ jobs:
           package-manager-cache: false
       - run: node --check index.mjs
       - run: node --test tests/*.test.mjs
+      - name: Prepare local registry and source fixture
+        run: |
+          docker run -d --rm --name publisher-registry -p 127.0.0.1:5000:5000 \
+            registry:3@sha256:ddf754342cfc8acc51a56d5d0ab6af06826461864460636d8bd5c546dab2a7b8
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:5000/v2/; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://localhost:5000/v2/
+          mkdir -p .publisher-smoke/app
+          printf 'FROM scratch AS runtime\nCOPY runtime.txt /runtime.txt\n' > .publisher-smoke/Dockerfile
+          printf 'runtime\n' > .publisher-smoke/runtime.txt
+          printf 'first release\n' > .publisher-smoke/app/version.txt
+      - name: Publish with a cold runtime
+        uses: ./publish-image
+        id: cold
+        with:
+          image: localhost:5000/test/app
+          context: .publisher-smoke
+          files: app
+          runtime-key-files: |
+            Dockerfile
+            runtime.txt
+      - name: Change application content
+        run: printf 'second release\n' > .publisher-smoke/app/version.txt
+      - name: Publish with a cached runtime
+        uses: ./publish-image
+        id: warm
+        with:
+          image: localhost:5000/test/app
+          context: .publisher-smoke
+          files: app
+          runtime-key-files: |
+            Dockerfile
+            runtime.txt
+      - name: Verify immutable images and updated files
+        env:
+          COLD_MISS: ${{ steps.cold.outputs.runtime-cache-miss }}
+          WARM_MISS: ${{ steps.warm.outputs.runtime-cache-miss }}
+          COLD_IMAGE: ${{ steps.cold.outputs.image }}
+          WARM_IMAGE: ${{ steps.warm.outputs.image }}
+        run: |
+          test "$COLD_MISS" = true
+          test "$WARM_MISS" = false
+          test "$COLD_IMAGE" != "$WARM_IMAGE"
+          crane export "$COLD_IMAGE" "$RUNNER_TEMP/cold.tar"
+          crane export "$WARM_IMAGE" "$RUNNER_TEMP/warm.tar"
+          test "$(tar -xOf "$RUNNER_TEMP/cold.tar" app/app/version.txt)" = 'first release'
+          test "$(tar -xOf "$RUNNER_TEMP/warm.tar" app/app/version.txt)" = 'second release'
+          test "$(tar -xOf "$RUNNER_TEMP/warm.tar" runtime.txt)" = runtime
+      - name: Remove test registry
+        if: always()
+        run: docker rm -f publisher-registry || true

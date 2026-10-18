@@ -1,0 +1,63 @@
+name: Publish a cached runtime image
+description: Append deterministic application files to a cached runtime and publish an immutable image.
+inputs:
+  image:
+    description: Destination registry repository without a tag or digest; authenticate first.
+    required: true
+  context:
+    description: Repository-relative source directory containing a Dockerfile with a runtime target.
+    default: '.'
+  files:
+    description: Newline-separated relative application files or directories. No globs or symlinks.
+    required: true
+  runtime-key-files:
+    description: Newline-separated runtime build inputs, including Dockerfile and every dependency lock file.
+    default: |
+      Dockerfile
+      requirements.txt
+  destination:
+    description: Absolute image directory for the application files.
+    default: /app
+  uid:
+    description: Numeric owner for application files.
+    default: '10001'
+  gid:
+    description: Numeric group for application files.
+    default: '10001'
+  env:
+    description: Newline-separated KEY=value image metadata. Never pass secrets.
+outputs:
+  image:
+    description: Published repository@sha256 digest.
+    value: ${{ steps.publish.outputs.image }}
+  digest:
+    description: Published sha256 digest.
+    value: ${{ steps.publish.outputs.digest }}
+  seconds:
+    description: Runtime lookup, packaging and push seconds; excludes tool installation.
+    value: ${{ steps.publish.outputs.seconds }}
+  runtime-cache-miss:
+    description: Whether the runtime needed a Docker build and push.
+    value: ${{ steps.publish.outputs.runtime-cache-miss }}
+runs:
+  using: composite
+  steps:
+    - name: Install pinned crane
+      shell: bash
+      env:
+        PUBLISH_ACTION_PATH: ${{ github.action_path }}
+      run: bash "$PUBLISH_ACTION_PATH/install-crane.sh"
+    - name: Append application layer and push
+      id: publish
+      shell: bash
+      env:
+        PUBLISH_ACTION_PATH: ${{ github.action_path }}
+        PUBLISH_IMAGE: ${{ inputs.image }}
+        PUBLISH_CONTEXT: ${{ inputs.context }}
+        PUBLISH_FILES: ${{ inputs.files }}
+        PUBLISH_RUNTIME_KEY_FILES: ${{ inputs.runtime-key-files }}
+        PUBLISH_DESTINATION: ${{ inputs.destination }}
+        PUBLISH_UID: ${{ inputs.uid }}
+        PUBLISH_GID: ${{ inputs.gid }}
+        PUBLISH_ENV: ${{ inputs.env }}
+      run: python3 "$PUBLISH_ACTION_PATH/publish.py"
