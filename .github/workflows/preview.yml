@@ -43,7 +43,7 @@ jobs:
           persist-credentials: false
       - name: Build and deploy preview
         id: deploy
-        uses: SnapEnvs/action@980b26bdc68b34db1ea544ba0f3d9062ef75507d
+        uses: SnapEnvs/action@f531b6996d949e59fd0a2c66807a8eb38b1a044e
         with:
           project: ${{ inputs.project }}
           api-url: ${{ inputs.api-url }}

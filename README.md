@@ -13,17 +13,24 @@ The reusable workflow uses an Ubuntu GitHub-hosted runner billed to the caller. 
 
 ## Use the Action with an existing build
 
-Keep your build, registry login and cache steps. Add a deployment step with one immutable image per configured service:
+Keep your build and cache steps. Authenticate a custom publisher with the official `registry-auth` companion, then deploy one immutable image per configured service:
 
 ```yaml
 permissions:
   contents: read
   id-token: write
 
-# Inside your existing job, after building and publishing:
+# Inside your existing job:
 steps:
-  # ... your build steps ...
-  - uses: SnapEnvs/action@980b26bdc68b34db1ea544ba0f3d9062ef75507d
+  # ... checkout, tool installation and build steps ...
+  - uses: SnapEnvs/action/registry-auth@f531b6996d949e59fd0a2c66807a8eb38b1a044e
+    id: registry
+    with:
+      project: YOUR_PROJECT_UUID
+  # ... publish with Docker or crane using the exported DOCKER_CONFIG ...
+  # The image path starts with steps.registry.outputs.image-prefix.
+  # Pass immutable digests from your publisher to the deployment step.
+  - uses: SnapEnvs/action@f531b6996d949e59fd0a2c66807a8eb38b1a044e
     id: preview
     with:
       project: YOUR_PROJECT_UUID
@@ -33,7 +40,7 @@ steps:
         worker=${{ steps.build.outputs.worker-image }}
 ```
 
-Replace the Action reference with the published repository and its full commit SHA. Each image output must be a complete `registry/path@sha256:<64 hex characters>` reference. The runtime must have its own pull access to external registries. Supplying `images` skips checkout/build/publication in this Action and requests only `DEPLOY` authority. Without `images`, use `actions/checkout` before the Action; Docker is required.
+Both Action references must use a published full commit SHA. Each image output must be a complete `registry/path@sha256:<64 hex characters>` reference. For an external registry, keep your own login step; the runtime must have its own pull access. Supplying `images` skips checkout/build/publication in this Action and requests only `DEPLOY` authority. Without `images`, use `actions/checkout` before the Action; Docker is required.
 
 | Input          | Default                | Meaning                                                                       |
 | -------------- | ---------------------- | ----------------------------------------------------------------------------- |
@@ -44,6 +51,16 @@ Replace the Action reference with the published repository and its full commit S
 | `wait-seconds` | `600`                  | Readiness deadline, 1–3600 seconds                                            |
 
 Outputs: `environment-id`, `preview-url`, `configuration-revision`, `deployment-skipped`. A partial release can be accepted with `deployment-skipped: true` when another required service has not been published yet; this is not a running preview.
+
+## Registry authentication for custom publishers
+
+`SnapEnvs/action/registry-auth` accepts `project` and `api-url` (default `https://snapenvs.com`). It exchanges GitHub OIDC for `IMAGE_PUBLISH` authority and selects the organization's enabled default registry space. Enable image publication on the configured GitHub source, with the same immutable repository/owner IDs and trusted branch requirements used by the deployment Action.
+
+The companion exports `DOCKER_CONFIG` for subsequent steps and returns `host`, `image-prefix`, `username` and `expires-at`. It never exports the credential as an Action output. Docker and crane read the isolated configuration automatically; no copied API client or stored SnapEnvs token is needed. Existing Docker credentials are preserved. A post action removes the temporary credential directory, including after a failed publication.
+
+Run authentication immediately before publication. The credential is bounded by the GitHub OIDC expiry and at most 15 minutes. It does not refresh in the background: invoke the companion again immediately before a later publication if necessary. Only trusted later steps may read the configuration; do not upload/cache that directory. Registry authentication does not deploy or create a pipeline plan. The deployment Action requests its own `DEPLOY` identity and uses the saved service configuration.
+
+The standalone deployment Action also accepts `wait-interval` from 1 to 30 seconds (default 2). Set `wait-interval: 1` when a faster readiness check is useful. This changes polling only; it does not change application health checks.
 
 ## Trust, retries and lifecycle
 
@@ -57,7 +74,7 @@ Previews expire using the project's lifetime. Sleep, wake and early destruction 
 
 ## Development
 
-Run `node --test tests/action.test.mjs` with Node 24 to validate the Action. The tests isolate GitHub/API and Docker boundaries; a real customer pipeline is the deployment acceptance check.
+Run `node --test tests/*.test.mjs` with Node 24 to validate the Action. The tests isolate GitHub/API and Docker boundaries; a real customer pipeline is the deployment acceptance check.
 
 This repository distributes the official SnapEnvs Action and `.github/workflows/preview.yml`. Pin a full commit SHA when integrating. Service configuration and the generated installation workflow are managed in [SnapEnvs](https://app.snapenvs.com/integrations).
 
