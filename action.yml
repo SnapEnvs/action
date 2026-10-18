@@ -1,0 +1,33 @@
+name: SnapEnvs preview
+description: Build on your GitHub runner and deploy using versioned configuration stored in SnapEnvs.
+author: SnapEnvs
+branding:
+  icon: layers
+  color: blue
+inputs:
+  project:
+    description: SnapEnvs project ID. Repository authorization is verified with GitHub OIDC.
+    required: true
+  api-url:
+    description: SnapEnvs API origin.
+    default: https://snapenvs.com
+  images:
+    description: Optional service=image@sha256:digest lines from an existing build. Omit to build all configured services and push to the SnapEnvs registry.
+  wait:
+    description: Wait until the deployed generation is ready.
+    default: 'true'
+  wait-seconds:
+    description: Maximum time to wait for readiness.
+    default: '600'
+outputs:
+  environment-id:
+    description: SnapEnvs environment ID.
+  preview-url:
+    description: Preview URL.
+  configuration-revision:
+    description: Immutable configuration revision used by this execution.
+  deployment-skipped:
+    description: Whether the release was accepted without starting a deployment.
+runs:
+  using: node24
+  main: index.mjs
