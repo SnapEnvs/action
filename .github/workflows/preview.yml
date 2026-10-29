@@ -30,7 +30,7 @@ concurrency:
 jobs:
   preview:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, snapenvs-local-heavy]
     timeout-minutes: 60
     outputs:
       preview-url: ${{ steps.deploy.outputs.preview-url }}
@@ -38,11 +38,19 @@ jobs:
       configuration-revision: ${{ steps.deploy.outputs.configuration-revision }}
       deployment-skipped: ${{ steps.deploy.outputs.deployment-skipped }}
     steps:
+      - name: Prepare BuildKit on the ephemeral runner
+        run: |
+          if ! docker buildx version >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends docker-buildx
+          fi
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
       - name: Build and deploy preview
         id: deploy
+        env:
+          DOCKER_BUILDKIT: '1'
         uses: SnapEnvs/action@f531b6996d949e59fd0a2c66807a8eb38b1a044e
         with:
           project: ${{ inputs.project }}
