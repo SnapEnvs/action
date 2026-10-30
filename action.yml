@@ -22,6 +22,9 @@ inputs:
   wait-interval:
     description: Seconds between readiness checks, from 1 to 30.
     default: '2'
+  reclaim-disk:
+    description: Remove each published image and the Docker build cache from the runner after its push, so several services build in sequence on a GitHub-hosted disk. Set false on a runner that keeps its own build cache.
+    default: 'true'
 outputs:
   environment-id:
     description: SnapEnvs environment ID.

@@ -76,6 +76,21 @@ export async function execute(command, args, options = {}) {
   }
 }
 
+// The registry holds the published layers. Freeing the runner lets the next service build on the same
+// GitHub-hosted disk; a cleanup failure must not fail an accepted publication.
+async function reclaim(exec, tag, options) {
+  for (const args of [
+    ['image', 'rm', '--force', tag],
+    ['builder', 'prune', '--all', '--force'],
+  ]) {
+    try {
+      await exec('docker', args, { ...options, quiet: true })
+    } catch (failure) {
+      console.warn(`SnapEnvs: docker ${args.join(' ')} failed and was skipped. ${failure.message}`)
+    }
+  }
+}
+
 export async function runAction({
   environment = process.env,
   fetchImpl = fetch,
@@ -88,6 +103,7 @@ export async function runAction({
   const wait = environment.INPUT_WAIT ?? 'true'
   const waitSeconds = Number(environment['INPUT_WAIT-SECONDS'] || 600)
   const waitInterval = Number(environment['INPUT_WAIT-INTERVAL'] || 2)
+  const reclaimDisk = environment['INPUT_RECLAIM-DISK'] ?? 'true'
   if (
     !['true', 'false'].includes(wait) ||
     !Number.isInteger(waitSeconds) ||
@@ -100,6 +116,8 @@ export async function runAction({
     throw new Error(
       'wait must be true or false; wait-seconds must be between 1 and 3600; wait-interval must be between 1 and 30.',
     )
+  if (!['true', 'false'].includes(reclaimDisk))
+    throw new Error('reclaim-disk must be true or false.')
   const { projectId, secrets, exchange, request } = createClient({
     environment,
     fetchImpl,
@@ -172,6 +190,7 @@ export async function runAction({
         )
         if (!image) throw new Error(`The published image digest is missing for ${service.name}.`)
         images[service.name] = image
+        if (reclaimDisk === 'true') await reclaim(exec, tag, options)
       }
     } catch (failure) {
       try {

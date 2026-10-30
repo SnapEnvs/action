@@ -6,10 +6,10 @@ Build images on your GitHub runner and deploy previews using configuration store
 
 1. Add the GitHub repository to a project with its immutable repository/owner IDs, trusted branches, base branch and service names.
 2. For automatic builds, enable image publication for that repository and choose an enabled default registry space for the organization.
-3. Under **Pipeline integration**, select the project and repository. Save build context, Dockerfile, optional build target, port, health path, resources, runtime variables and migration command for every service. Paths are relative to the repository root. Store secrets in the project's Secrets tab and reference them with `secret:NAME`.
+3. Under **Projects → your project → Pipeline**, select the repository. Save build context, Dockerfile, optional build target, port, health path, resources, runtime variables and migration command for every service. Paths are relative to the repository root. Store secrets in the project's Secrets tab and reference them with `secret:NAME`.
 4. Configure project add-ons and lifetime in SnapEnvs. Copy the generated workflow into `.github/workflows/preview.yml` in the application repository, including the default branch. Its published workflow reference is pinned to a full commit SHA.
 
-The reusable workflow uses an Ubuntu GitHub-hosted runner billed to the caller. Each service builds sequentially with Docker, pushes to the SnapEnvs registry, and deploys the resulting immutable digest. No `secrets: inherit` is needed. Your repository/organization's Actions policy must allow this Action and reusable workflow.
+The reusable workflow uses an Ubuntu GitHub-hosted runner billed to the caller. Before building, it removes preinstalled toolchains the build does not use (Android SDK, .NET, GHC, CodeQL) and the runner's cached images; pass `free-runner-disk: false` to skip this. Each service builds sequentially with Docker, pushes to the SnapEnvs registry, and deploys the resulting immutable digest. After each push the Action removes the published image and the Docker build cache from the runner, so several services fit the GitHub-hosted disk. No `secrets: inherit` is needed. Your repository/organization's Actions policy must allow this Action and reusable workflow.
 
 ## Use the Action with an existing build
 
@@ -49,6 +49,7 @@ Both Action references must use a published full commit SHA. Each image output m
 | `images`       | empty                  | One `service=immutable-image` per line; empty builds every configured service |
 | `wait`         | `true`                 | Wait for the accepted generation to become ready                              |
 | `wait-seconds` | `600`                  | Readiness deadline, 1–3600 seconds                                            |
+| `reclaim-disk` | `true`                 | Remove the published image and build cache from the runner after each push    |
 
 Outputs: `environment-id`, `preview-url`, `configuration-revision`, `deployment-skipped`. A partial release can be accepted with `deployment-skipped: true` when another required service has not been published yet; this is not a running preview.
 
@@ -126,3 +127,13 @@ Previews expire using the project's lifetime. Sleep, wake and early destruction 
 This directory is the distribution source. The application repository's `docs/github-actions.md` describes packaging and publication; `scripts/package-github-integration.mjs` assembles the deployment Action, registry authentication and image publishing companions, tests and reusable workflow without publishing them. Tests run with `npm run test:github` in the application repository, including the Python publisher suite and the isolated standalone distribution tests.
 
 GitHub references: [reusable workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows), [Action metadata](https://docs.github.com/en/actions/reference/workflows-and-actions/metadata-syntax), [OIDC claims](https://docs.github.com/en/actions/reference/security/oidc).
+
+## Named CI destinations
+
+Choose **CI destination** in the project pipeline page. Automatic branch preview remains the
+legacy default. Selecting `dev` or `staging` saves that exact environment ID with the
+configuration revision. The official published workflow needs no new input or client update.
+Each run keeps its original destination, including retries and configuration edits while it
+builds. A destroyed or inaccessible target fails; its name is never used to find a replacement.
+Only the selected environment is redeployed. Its private access, wake policy, deadline and
+persistent add-ons remain in place. See [named environments](../../docs/named-environments.md).

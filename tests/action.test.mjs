@@ -158,8 +158,9 @@ test('build mode publishes multiple immutable digests, renews expired credential
       commands.push(args)
       if (args[0] === 'build') f.advance(360000)
       if (args[0] === 'login') assert.equal(options.input, `credential-${f.exchanges()}`)
-      if (args[0] === 'image')
+      if (args[0] === 'image' && args[1] === 'inspect')
         return JSON.stringify([`${args[2].split(':run-')[0]}@sha256:${'a'.repeat(64)}`])
+      if (args[0] === 'builder') throw new Error('prune unavailable')
       return ''
     },
   })
@@ -170,16 +171,66 @@ test('build mode publishes multiple immutable digests, renews expired credential
     'PIPELINE',
   )
   assert.deepEqual(
-    commands.map((c) => c[0]),
-    ['build', 'login', 'push', 'image', 'build', 'login', 'push', 'image'],
+    commands.map((c) => (c[0] === 'image' || c[0] === 'builder' ? `${c[0]} ${c[1]}` : c[0])),
+    [
+      'build',
+      'login',
+      'push',
+      'image inspect',
+      'image rm',
+      'builder prune',
+      'build',
+      'login',
+      'push',
+      'image inspect',
+      'image rm',
+      'builder prune',
+    ],
   )
-  assert.ok(commands[4].includes('production'))
+  assert.deepEqual(commands[4], [
+    'image',
+    'rm',
+    '--force',
+    'registry.example.test/team/web:run-execution',
+  ])
+  assert.deepEqual(commands[5], ['builder', 'prune', '--all', '--force'])
+  assert.ok(commands[6].includes('production'))
   assert.equal(
     Object.keys(f.calls.find((c) => c.url.pathname.endsWith('/github/releases')).body.images)
       .length,
     2,
   )
   await assert.rejects(access(dockerConfig), { code: 'ENOENT' })
+})
+
+test('reclaim-disk false keeps the published image and build cache, and invalid values are rejected before exchanging identity', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'snapenvs-action-test-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  await writeFile(join(directory, 'Dockerfile'), 'FROM scratch\n')
+  const f = fixture({
+    INPUT_IMAGES: '',
+    GITHUB_WORKSPACE: directory,
+    'INPUT_RECLAIM-DISK': 'false',
+  })
+  const commands = []
+  await runAction({
+    ...f,
+    exec: async (command, args) => {
+      commands.push(args)
+      if (args[0] === 'image')
+        return JSON.stringify([`${args[2].split(':run-')[0]}@sha256:${'a'.repeat(64)}`])
+      return ''
+    },
+  })
+  assert.deepEqual(
+    commands.map((c) => c[0]),
+    ['build', 'login', 'push', 'image'],
+  )
+  for (const value of ['yes', '1', '']) {
+    const invalid = fixture({ 'INPUT_RECLAIM-DISK': value })
+    await assert.rejects(runAction(invalid), /reclaim-disk/)
+    assert.equal(invalid.calls.length, 0)
+  }
 })
 
 test('build failures are redacted, reported with the reserved sequence, and never deploy', async (t) => {
