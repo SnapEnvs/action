@@ -42,7 +42,7 @@ jobs:
       configuration-revision: ${{ steps.deploy.outputs.configuration-revision }}
       deployment-skipped: ${{ steps.deploy.outputs.deployment-skipped }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Free runner disk
@@ -59,7 +59,7 @@ jobs:
           df -h / | tail -n 1
       - name: Build and deploy preview
         id: deploy
-        uses: SnapEnvs/action@9cbb291791f3ebfbc133491a67794fb82715db6d
+        uses: SnapEnvs/action@5c0c9755ac5841828a3472725935ce46767465e9
         with:
           project: ${{ inputs.project }}
           api-url: ${{ inputs.api-url }}
