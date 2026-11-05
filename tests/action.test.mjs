@@ -373,3 +373,35 @@ test('validates digest inputs and API origin', () => {
     assert.throws(() => apiOrigin(value))
   assert.equal(apiOrigin('http://localhost:8080'), 'http://localhost:8080')
 })
+
+
+test('expired push renews login without rebuilding; permanent failures and retry exhaustion stop', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'snapenvs-push-test-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  await writeFile(join(directory, 'Dockerfile'), 'FROM scratch\n')
+  for (const mode of ['recover', 'exhaust', 'budget']) {
+    const f = fixture({ INPUT_IMAGES: '', GITHUB_WORKSPACE: directory })
+    const commands = []
+    let pushes = 0
+    const promise = runAction({ ...f, exec: async (_, args, options) => {
+      commands.push(args[0])
+      if (args[0] === 'login') assert.equal(options.input, `credential-${f.exchanges()}`)
+      if (args[0] === 'push') {
+        pushes++
+        f.advance(360000)
+        if (mode !== 'recover' || pushes === 1) {
+          const error = new Error('docker failed')
+          error.output = mode === 'budget' ? 'Registry publication budget reached.' : 'unauthorized: authentication required'
+          throw error
+        }
+      }
+      if (args[0] === 'image') return JSON.stringify([image])
+      return ''
+    } })
+    if (mode === 'recover') await promise
+    else await assert.rejects(promise, /docker failed/)
+    assert.equal(commands.filter(x => x === 'build').length, 1)
+    assert.equal(pushes, mode === 'recover' ? 2 : mode === 'exhaust' ? 3 : 1)
+    if (mode !== 'recover') assert.ok(!f.calls.some(c => c.url.pathname.endsWith('/github/releases')))
+  }
+})

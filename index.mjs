@@ -170,13 +170,22 @@ export async function runAction({
           ],
           options,
         )
-        // Builds can outlive OIDC credentials. Authenticate immediately before publishing.
-        await exec(
-          'docker',
-          ['login', registry.host, '--username', registry.username, '--password-stdin'],
-          { ...options, input: await exchange(), quiet: true },
-        )
-        await exec('docker', ['push', tag], options)
+        // A running Docker push retains its login credentials. Restart only the push
+        // after authentication failure, keeping the built image and uploaded layers.
+        for (let attempt = 0; ; attempt++) {
+          await exec('docker',
+            ['login', registry.host, '--username', registry.username, '--password-stdin'],
+            { ...options, input: await exchange(attempt > 0), quiet: true })
+          try {
+            await exec('docker', ['push', tag], options)
+            break
+          } catch (failure) {
+            const detail = String(failure.output || failure.message || '')
+            if (attempt >= 2 || !/unauthorized: authentication required|authentication required|token has expired/i.test(detail))
+              throw failure
+            await sleep(1000 * (attempt + 1))
+          }
+        }
         const digests = JSON.parse(
           await exec('docker', ['image', 'inspect', tag, '--format', '{{json .RepoDigests}}'], {
             ...options,
