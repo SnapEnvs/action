@@ -59,7 +59,7 @@ jobs:
           df -h / | tail -n 1
       - name: Build and deploy preview
         id: deploy
-        uses: SnapEnvs/action@5c0c9755ac5841828a3472725935ce46767465e9
+        uses: SnapEnvs/action@556829febfec353fb4038da28b812439c325f7f1
         with:
           project: ${{ inputs.project }}
           api-url: ${{ inputs.api-url }}
