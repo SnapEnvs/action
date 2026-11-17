@@ -97,7 +97,13 @@ export function createClient({
       try {
         response = await fetchImpl(`${base}/api/v1/ci${path}`, {
           method: body === undefined ? 'GET' : 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            ...(path.endsWith('/plan')
+              ? { 'X-SnapEnvs-Build-Capabilities': 'build-artifacts-v1' }
+              : {}),
+          },
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
           redirect: 'error',
           signal: AbortSignal.timeout(60000),
